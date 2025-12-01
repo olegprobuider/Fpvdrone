@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FPV Drone</title>
+<style>
+    body { margin: 0; background: #111; overflow: hidden; }
+    canvas { display:block; margin:0 auto; background:#1a1a1a;}
+
+    /* Джойстики */
+    .joystick { position:fixed; width:130px; height:130px; 
+        border-radius:50%; background:#ffffff22; }
+    .stick { width:60px; height:60px; border-radius:50%;
+        background:#ffffff55; position:absolute; left:35px; top:35px; }
+
+    #leftJoy { left:20px; bottom:20px; }
+    #rightJoy { right:20px; bottom:20px; }
+
+    /* Меню */
+    #menu { position:fixed; top:0; left:0; width:100%; height:100%;
+        background:#000c; display:flex; flex-direction:column;
+        justify-content:center; align-items:center; color:#fff; }
+    .btn { margin:10px; padding:10px 20px; background:#222;
+        border-radius:10px; font-size:24px; }
+</style>
+</head>
+<body>
+
+<div id="menu">
+    <h1>FPV DRONE 2D</h1>
+    <div class="btn" onclick="startGame()">Начать игру</div>
+</div>
+
+<canvas id="game" width="900" height="500"></canvas>
+
+<div id="leftJoy" class="joystick"><div class="stick"></div></div>
+<div id="rightJoy" class="joystick"><div class="stick"></div></div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+let playing = false;
+
+let drone = { x:200, y:250, speed:3 };
+let bullets = [];
+let enemies = [];
+let buildings = [];
+let soldiers = [];
+let explosions = [];
+
+// Создаём врагов
+function spawnLevel() {
+    enemies = [];
+
+    // Танки
+    for(let i=0; i<3; i++){
+        enemies.push({
+            type:"tank",
+            x:550 + Math.random()*300,
+            y:80 + Math.random()*350,
+            hp:8
+        });
+    }
+
+    // Бронетранспорт
+    for(let i=0; i<3; i++){
+        enemies.push({
+            type:"vehicle",
+            x:550 + Math.random()*300,
+            y:80 + Math.random()*350,
+            hp:5
+        });
+    }
+
+    // Солдаты
+    soldiers = [];
+    for(let i=0;i<5;i++){
+        soldiers.push({
+            x:550 + Math.random()*300,
+            y:50 + Math.random()*400,
+            hp:2
+        });
+    }
+
+    // Здания
+    buildings = [
+        {x:700, y:150, w:80, h:120, hp:12},
+        {x:780, y:300, w:100, h:140, hp:15}
+    ];
+}
+
+// Взрыв
+function createExplosion(x,y){
+    explosions.push({x,y,r:5,life:20});
+}
+
+// Игровой цикл
+function loop(){
+    if(!playing) return;
+
+    ctx.clearRect(0,0,900,500);
+
+    // ДРОН
+    ctx.fillStyle="cyan";
+    ctx.fillRect(drone.x-10, drone.y-10, 20,20);
+
+    // ПУЛИ
+    ctx.fillStyle="yellow";
+    bullets.forEach(b=>{
+        b.x += 12;
+        ctx.fillRect(b.x,b.y,10,4);
+    });
+
+    // ТАНКИ / ТЕХНИКА
+    enemies.forEach(e=>{
+        if(e.type==="tank") ctx.fillStyle="green";
+        if(e.type==="vehicle") ctx.fillStyle="orange";
+        ctx.fillRect(e.x-20,e.y-15,40,30);
+
+        ctx.fillStyle="red";
+        ctx.fillRect(e.x-20, e.y-25, 40*(e.hp/8), 5);
+    });
+
+    // СОЛДАТЫ
+    ctx.fillStyle="white";
+    soldiers.forEach(s=>{
+        ctx.fillRect(s.x-5,s.y-10,10,20);
+    });
+
+    // ЗДАНИЯ
+    buildings.forEach(b=>{
+        ctx.fillStyle="#444";
+        ctx.fillRect(b.x,b.y,b.w,b.h);
+
+        ctx.fillStyle="red";
+        ctx.fillRect(b.x, b.y-7, b.w*(b.hp/b.h/1.5), 5);
+    });
+
+    // ВЗРЫВЫ
+    explosions.forEach(ex=>{
+        ctx.beginPath();
+        ctx.arc(ex.x,ex.y,ex.r,0,Math.PI*2);
+        ctx.fillStyle=`rgba(255,150,0,${ex.life/20})`;
+        ctx.fill();
+        ex.r += 2;
+        ex.life--;
+    });
+    explosions = explosions.filter(ex=>ex.life>0);
+
+    // СТОЛКНОВЕНИЯ
+    bullets.forEach(b=>{
+
+        // Техника
+        enemies.forEach(e=>{
+            if(b.x>e.x-20 && b.x<e.x+20 &&
+               b.y>e.y-15 && b.y<e.y+15){
+                e.hp--;
+                b.x = 2000;
+                createExplosion(e.x,e.y);
+            }
+        });
+
+        // Солдаты
+        soldiers.forEach(s=>{
+            if(b.x>s.x-5 && b.x<s.x+5 &&
+               b.y>s.y-10 && b.y<s.y+10){
+                s.hp--;
+                b.x=2000;
+                createExplosion(s.x,s.y);
+            }
+        });
+
+        // Здания
+        buildings.forEach(o=>{
+            if(b.x>o.x && b.x<o.x+o.w &&
+               b.y>o.y && b.y<o.y+o.h){
+                o.hp--;
+                b.x=2000;
+                createExplosion(b.x,b.y);
+            }
+        });
+
+    });
+
+    // Убираем мертвых
+    enemies = enemies.filter(e=>e.hp>0);
+    soldiers = soldiers.filter(s=>s.hp>0);
+    buildings = buildings.filter(o=>o.hp>0);
+
+    // ПОБЕДА
+    if(enemies.length===0 && soldiers.length===0 && buildings.length===0){
+        playing = false;
+        document.getElementById("menu").style.display="flex";
+    }
+
+    requestAnimationFrame(loop);
+}
+
+// Стрельба
+setInterval(()=>{
+    if(!playing) return;
+    bullets.push({x:drone.x+10, y:drone.y});
+},200);
+
+// Джойстики
+function joystick(id,cb){
+    const joy=document.getElementById(id);
+    const stick=joy.children[0];
+    joy.addEventListener("touchmove",e=>{
+        const t=e.touches[0];
+        const r=joy.getBoundingClientRect();
+        let x=t.clientX-r.left-60;
+        let y=t.clientY-r.top-60;
+        x=Math.max(-40,Math.min(40,x));
+        y=Math.max(-40,Math.min(40,y));
+
+        stick.style.left=(35+x)+"px";
+        stick.style.top=(35+y)+"px";
+        cb(x/40,y/40);
+    });
+    joy.addEventListener("touchend",()=>{
+        stick.style.left="35px";
+        stick.style.top="35px";
+        cb(0,0);
+    });
+}
+
+joystick("leftJoy",(lx,ly)=>{
+    drone.x+=lx*drone.speed;
+    drone.y+=ly*drone.speed;
+});
+joystick("rightJoy",(rx,ry)=>{ /* сюда позже добавим камеру */ });
+
+function startGame(){
+    document.getElementById("menu").style.display="none";
+    drone.x=200; drone.y=250;
+    spawnLevel();
+    playing=true;
+    loop();
+}
+</script>
+</body>
+</html>
