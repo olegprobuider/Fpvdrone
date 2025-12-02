@@ -1,263 +1,809 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FPV Drone 2D</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Drone Kamikaze — 2D Canvas Game</title>
 <style>
-    body { margin:0; background:#000; overflow:hidden; }
-    canvas { background:#1a1a1a; display:block; margin:0 auto; }
-
-    .joystick {
-        position:fixed;
-        width:130px; height:130px;
-        border-radius:50%;
-        background:#ffffff22;
-    }
-    .stick {
-        width:60px; height:60px;
-        border-radius:50%;
-        background:#ffffff55;
-        position:absolute;
-        left:35px; top:35px;
-    }
-
-    #leftJoy { left:20px; bottom:20px; }
-    #rightJoy { right:20px; bottom:20px; }
-
-    #menu {
-        position:fixed;
-        top:0; left:0;
-        width:100%; height:100%;
-        background:#000c;
-        color:white;
-        display:flex;
-        justify-content:center;
-        align-items:center;
-        flex-direction:column;
-        font-size:30px;
-    }
-
-    .btn {
-        padding:10px 20px;
-        background:#222;
-        border-radius:10px;
-        margin-top:20px;
-        font-size:25px;
-    }
+  :root{--bg:#0b0b0f;--panel:#111218;--accent:#ff6b35;--muted:#9aa0a6}
+  html,body{height:100%;margin:0;background:var(--bg);color:#e8eef2;font-family:Inter,Segoe UI,Roboto,system-ui}
+  #gameWrap{display:flex;flex-direction:column;height:100vh;}
+  header{padding:10px 14px;background:linear-gradient(90deg,#07121a10,transparent);display:flex;align-items:center;gap:12px}
+  h1{margin:0;font-size:18px}
+  #uiTop{margin-left:auto;display:flex;gap:8px;align-items:center}
+  .btn{background:var(--panel);border:1px solid rgba(255,255,255,0.03);padding:8px 10px;border-radius:8px;color:#e8eef2;cursor:pointer}
+  .muted{color:var(--muted);font-size:13px}
+  #main{display:flex;flex:1;position:relative}
+  #canvas{flex:1;background:linear-gradient(#0b0b0f,#071020);display:block}
+  #menu{position:absolute;left:12px;top:12px;background:rgba(10,12,16,0.9);padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);min-width:260px}
+  .menu-section{margin-bottom:10px}
+  label{display:block;font-size:13px;margin-bottom:6px;color:var(--muted)}
+  select,input[type="file"]{width:100%;padding:6px;border-radius:6px;background:#0f1316;border:1px solid rgba(255,255,255,0.03);color:#e8eef2}
+  .drone-preview{width:100%;height:120px;background:#061015;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .small{font-size:13px;color:var(--muted)}
+  #hud{position:absolute;right:12px;top:12px;background:rgba(10,12,16,0.9);padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);min-width:160px}
+  #controlsMobile{position:absolute;left:0;bottom:0;right:0;pointer-events:none}
+  .joystick{width:140px;height:140px;background:transparent;position:absolute;bottom:12px;border-radius:12px;padding:18px;pointer-events:auto}
+  #joyLeft{left:12px}
+  #joyRight{right:12px}
+  .stick{width:70px;height:70px;border-radius:50%;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:center;touch-action:none}
+  .control-btn{margin-top:8px;display:block;text-align:center;padding:8px;border-radius:8px;background:linear-gradient(180deg,#1b1f23,#0f1113);border:1px solid rgba(255,255,255,0.03);cursor:pointer}
+  footer{padding:6px 10px;text-align:center;font-size:12px;color:var(--muted)}
+  /* responsive tweaks */
+  @media(min-width:900px){
+    #menu{min-width:320px}
+    .joystick{width:180px;height:180px;padding:22px}
+    .stick{width:86px;height:86px}
+  }
 </style>
 </head>
 <body>
+<div id="gameWrap">
+  <header>
+    <h1>Drone Kamikaze — 2D (Canvas)</h1>
+    <div id="uiTop">
+      <div class="muted">Уровень: <span id="levelLabel">—</span></div>
+      <button id="pauseBtn" class="btn">Пауза</button>
+      <button id="restartBtn" class="btn">Рестарт уровня</button>
+    </div>
+  </header>
 
-<div id="menu">
-    FPV DRONE
-    <div class="btn" onclick="startGame()">Начать игру</div>
+  <div id="main">
+    <canvas id="canvas"></canvas>
+
+    <!-- меню выбора / старт -->
+    <div id="menu">
+      <div class="menu-section">
+        <label>Главное меню</label>
+        <div style="display:flex;gap:8px">
+          <button id="startBtn" class="btn">Начать игру</button>
+          <button id="toMenuBtn" class="btn" style="display:none">В меню</button>
+        </div>
+        <div class="small muted" style="margin-top:8px">Управление: левый джойстик — движение, правый — поворот/навестися. Кнопка «Взорваться» — самоуничтожение при контакте.</div>
+      </div>
+
+      <div class="menu-section">
+        <label>Выбор дрона (загрузить свою картинку или оставить)</label>
+        <div class="drone-preview" id="dronePreview">
+          <canvas id="dronePreviewCanvas" width="380" height="120"></canvas>
+        </div>
+        <input id="droneFile" type="file" accept="image/*" />
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="defaultDroneBtn" class="btn">Использовать встроенный</button>
+          <button id="savePresetBtn" class="btn">Сохранить настройки (локально)</button>
+        </div>
+      </div>
+
+      <div class="menu-section">
+        <label>Выбор уровня</label>
+        <select id="levelSelect">
+          <option value="1">Уровень 1 — Лёгкий квартал</option>
+          <option value="2">Уровень 2 — Промзона</option>
+          <option value="3">Уровень 3 — Центр города</option>
+          <option value="4">Уровень 4 — Шоссе и колонны</option>
+          <option value="5">Уровень 5 — База техники</option>
+        </select>
+      </div>
+
+      <div class="menu-section">
+        <label>Параметры дрона</label>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1">
+            <label class="small">Скорость</label>
+            <input id="speedRange" type="range" min="60" max="260" value="140" />
+          </div>
+          <div style="flex:1">
+            <label class="small">Урон</label>
+            <input id="powerRange" type="range" min="1" max="10" value="4" />
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;">
+        <button id="controlsHint" class="btn">Как играть</button>
+        <button id="downloadBtn" class="btn">Сохранить прогресс</button>
+      </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud">
+      <div>Очки: <span id="score">0</span></div>
+      <div>Цель: уничтожить все враги</div>
+      <div style="margin-top:8px">Жизни дрона: <span id="droneLives">1</span></div>
+    </div>
+
+    <!-- Мобильные джойстики -->
+    <div id="controlsMobile">
+      <div id="joyLeft" class="joystick" style="touch-action:none">
+        <div class="stick" id="leftStick"></div>
+      </div>
+      <div id="joyRight" class="joystick">
+        <div class="stick" id="rightStick"></div>
+        <div class="control-btn" id="explodeBtn">Взорваться</div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>Сделано на Canvas — мобильное управление готово. Удачи!</footer>
 </div>
 
-<canvas id="game" width="900" height="500"></canvas>
-
-<div id="leftJoy" class="joystick"><div class="stick"></div></div>
-<div id="rightJoy" class="joystick"><div class="stick"></div></div>
-
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+/*
+  Drone Kamikaze — single-file 2D game
+  - Canvas rendering
+  - Main menu, drone selection (upload), 5 levels
+  - Big procedural map with buildings and enemies (tanks, cars, infantry)
+  - Mobile touch joysticks (left = movement, right = rotate/aim)
+  - Kamikaze explosion on contact when armed
+  - All logic in this script block
+*/
 
-let playing = false;
+(() => {
+  // --- Настройки и глобальные переменные ---
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  let W = canvas.width = innerWidth;
+  let H = canvas.height = innerHeight - 60; // leave room for header
+  window.addEventListener('resize', () => {
+    W = canvas.width = innerWidth;
+    H = canvas.height = innerHeight - 60;
+  });
 
-// ВРЕМЕННОЕ PNG ДРОНА (90×90)
-const droneImg = new Image();
-droneImg.src =
-"https://i.imgur.com/tG2Z3hE.png"; // временный PNG (заменим на твой)
+  // UI elements
+  const startBtn = document.getElementById('startBtn');
+  const toMenuBtn = document.getElementById('toMenuBtn');
+  const levelSelect = document.getElementById('levelSelect');
+  const levelLabel = document.getElementById('levelLabel');
+  const scoreEl = document.getElementById('score');
+  const dronePreviewCanvas = document.getElementById('dronePreviewCanvas');
+  const dronePreviewCtx = dronePreviewCanvas.getContext('2d');
+  const droneFile = document.getElementById('droneFile');
+  const defaultDroneBtn = document.getElementById('defaultDroneBtn');
+  const speedRange = document.getElementById('speedRange');
+  const powerRange = document.getElementById('powerRange');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const explodeBtn = document.getElementById('explodeBtn');
+  const leftStick = document.getElementById('leftStick');
+  const rightStick = document.getElementById('rightStick');
+  const droneLivesEl = document.getElementById('droneLives');
 
-let drone = { x:200, y:250, speed:3 };
+  // game state
+  let gameState = 'menu'; // menu | playing | paused | gameover
+  let currentLevel = 1;
+  let score = 0;
+  let lastTime = performance.now();
+  let delta = 0;
+  let paused = false;
 
-let bullets = [];
-let enemies = [];
-let buildings = [];
-let soldiers = [];
-let explosions = [];
+  // map and entities
+  const MAP_SIZE = 4000; // world is MAP_SIZE x MAP_SIZE
+  let camera = { x: MAP_SIZE/2, y: MAP_SIZE/2, zoom: 1.0 };
+  let buildings = [];
+  let enemies = []; // each enemy has type: 'tank'|'car'|'infantry'
+  let bullets = [];
+  let explosions = [];
+  let player = null;
+  let keys = {};
+  let usingTouch = false;
 
-// СОЗДАЕМ УРОВЕНЬ
-function spawnLevel() {
-    enemies = [];
-    soldiers = [];
+  // drone sprite handling
+  const droneImg = new Image();
+  let droneLoaded = false;
+  let droneCustomSet = false;
+  droneImg.onload = () => { droneLoaded = true; drawPreview(); };
+  // built-in drone drawing (if no image)
+  function drawPreview(){
+    const c = dronePreviewCtx;
+    c.clearRect(0,0,dronePreviewCanvas.width,dronePreviewCanvas.height);
+    c.fillStyle = "#061014";
+    c.fillRect(0,0,dronePreviewCanvas.width,dronePreviewCanvas.height);
+    if(droneLoaded){
+      // draw image centered
+      const iw = droneImg.width, ih = droneImg.height;
+      const scale = Math.min((dronePreviewCanvas.width-8)/iw, (dronePreviewCanvas.height-8)/ih, 1.6);
+      const w = iw * scale, h = ih * scale;
+      c.drawImage(droneImg, (dronePreviewCanvas.width-w)/2, (dronePreviewCanvas.height-h)/2, w, h);
+    } else {
+      // draw stylized drone silhouette
+      c.save();
+      c.translate(dronePreviewCanvas.width/2, dronePreviewCanvas.height/2);
+      c.fillStyle = "#0f9";
+      c.beginPath();
+      c.ellipse(0,0,60,24,0,0,Math.PI*2);
+      c.fill();
+      c.fillStyle = "#fff";
+      c.fillRect(-6,-10,12,20);
+      c.restore();
+    }
+  }
+
+  // load default built-in drone as data (we'll draw programmatically)
+  function setDefaultDrone(){
+    droneLoaded = false;
+    droneCustomSet = false;
+    drawPreview();
+  }
+
+  // load drone from file input
+  droneFile.addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      droneImg.src = ev.target.result;
+      droneCustomSet = true;
+    };
+    reader.readAsDataURL(f);
+  });
+
+  defaultDroneBtn.addEventListener('click', setDefaultDrone);
+
+  // save settings to localStorage (simple)
+  document.getElementById('savePresetBtn').addEventListener('click', () => {
+    localStorage.setItem('dk_speed', speedRange.value);
+    localStorage.setItem('dk_power', powerRange.value);
+    alert("Настройки сохранены локально.");
+  });
+  // load if present
+  if(localStorage.getItem('dk_speed')) speedRange.value = localStorage.getItem('dk_speed');
+  if(localStorage.getItem('dk_power')) powerRange.value = localStorage.getItem('dk_power');
+
+  // --- World generation ---
+  function generateLevel(level){
     buildings = [];
+    enemies = [];
+    bullets = [];
     explosions = [];
-
-    // Танки
-    for (let i=0; i<3; i++) {
-        enemies.push({
-            type:"tank",
-            x:550 + Math.random()*300,
-            y:100 + Math.random()*300,
-            hp:8
-        });
+    // difficulty scaling
+    const baseBuildings = 40 + level*10;
+    const enemyCount = 6 + level*6;
+    for(let i=0;i<baseBuildings;i++){
+      const bw = randInt(60,220);
+      const bh = randInt(60,220);
+      buildings.push({
+        x: randInt(100, MAP_SIZE-100),
+        y: randInt(100, MAP_SIZE-100),
+        w: bw, h: bh,
+        hp: 3 + Math.floor(level/2)
+      });
     }
-
-    // Солдаты
-    for (let i=0; i<5; i++) {
-        soldiers.push({
-            x:600 + Math.random()*250,
-            y:80 + Math.random()*350,
-            hp:2
-        });
+    for(let i=0;i<enemyCount;i++){
+      const t = choose(['tank','car','infantry']);
+      enemies.push(spawnEnemy(t));
     }
+    // place player near center-ish
+    player = createPlayer(MAP_SIZE/2 + randInt(-200,200), MAP_SIZE/2 + randInt(-200,200));
+    camera.x = player.x; camera.y = player.y;
+  }
 
-    // Здания
-    buildings.push(
-        {x:700, y:150, w:100, h:120, hp:12},
-        {x:780, y:320, w:100, h:100, hp:15}
-    );
-}
+  function spawnEnemy(type){
+    const x = randInt(100, MAP_SIZE-100);
+    const y = randInt(100, MAP_SIZE-100);
+    let hp = 2;
+    if(type==='tank') hp = 6;
+    if(type==='car') hp = 3;
+    return {id:uid(), type, x, y, dir:Math.random()*Math.PI*2, speed: (type==='infantry'?70: (type==='car'?90:50)), hp, fireCooldown: randFloat(0.5,2.0)};
+  }
 
-// ВЗРЫВ
-function createExplosion(x,y){
-    explosions.push({x,y,r:5,life:20});
-}
+  function createPlayer(x,y){
+    return {
+      id: 'player',
+      x, y, vx:0, vy:0, angle:0,
+      speed: parseFloat(speedRange.value),
+      power: parseInt(powerRange.value),
+      armed: false,
+      lives: 1
+    };
+  }
 
-// ИГРОВОЙ ЦИКЛ
-function loop(){
-    if (!playing) return;
+  // --- Utils ---
+  function uid(){ return Math.random().toString(36).slice(2,9); }
+  function randInt(a,b){ return Math.floor(a + Math.random()*(b-a+1)); }
+  function randFloat(a,b){ return a + Math.random()*(b-a); }
+  function choose(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 
-    ctx.clearRect(0,0,900,500);
+  // coordinate transforms: world -> screen
+  function worldToScreen(wx, wy){
+    const scale = Math.min(W / 600, H / 400) * camera.zoom;
+    const sx = (wx - camera.x) * scale + W/2;
+    const sy = (wy - camera.y) * scale + H/2;
+    return {x:sx, y:sy, scale};
+  }
 
-    // ДРОН PNG
-    ctx.drawImage(droneImg, drone.x-45, drone.y-45, 90, 90);
+  // --- Input: keyboard for desktop ---
+  addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if(e.key===' ') e.preventDefault(); });
+  addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
-    // ПУЛИ
-    ctx.fillStyle="yellow";
-    bullets.forEach(b=>{
-        b.x += 12;
-        ctx.fillRect(b.x, b.y, 10,3);
-    });
-
-    // ТАНКИ / ТЕХНИКА
-    enemies.forEach(e=>{
-        ctx.fillStyle="green";
-        ctx.fillRect(e.x-20, e.y-15, 40, 30);
-
-        ctx.fillStyle="red";
-        ctx.fillRect(e.x-20, e.y-25, 40*(e.hp/8), 4);
-    });
-
-    // СОЛДАТЫ
-    ctx.fillStyle="white";
-    soldiers.forEach(s=>{
-        ctx.fillRect(s.x-5, s.y-10, 10, 20);
-    });
-
-    // ЗДАНИЯ
-    buildings.forEach(b=>{
-        ctx.fillStyle="#333";
-        ctx.fillRect(b.x,b.y,b.w,b.h);
-
-        ctx.fillStyle="red";
-        ctx.fillRect(b.x, b.y-7, b.w*(b.hp/15), 4);
-    });
-
-    // ВЗРЫВЫ
-    explosions.forEach(ex=>{
-        ctx.beginPath();
-        ctx.arc(ex.x, ex.y, ex.r, 0, Math.PI*2);
-        ctx.fillStyle=`rgba(255,150,0,${ex.life/20})`;
-        ctx.fill();
-        ex.r += 2;
-        ex.life--;
-    });
-    explosions = explosions.filter(e=>e.life>0);
-
-    // СТОЛКНОВЕНИЯ
-    bullets.forEach(b=>{
-        enemies.forEach(e=>{
-            if (b.x>e.x-20 && b.x<e.x+20 &&
-                b.y>e.y-15 && b.y<e.y+15) {
-                e.hp--;
-                b.x = 2000;
-                createExplosion(e.x,e.y);
-            }
-        });
-
-        soldiers.forEach(s=>{
-            if (b.x>s.x-5 && b.x<s.x+5 &&
-                b.y>s.y-10 && b.y<s.y+10) {
-                s.hp--;
-                b.x=2000;
-                createExplosion(s.x,s.y);
-            }
-        });
-
-        buildings.forEach(o=>{
-            if (b.x>o.x && b.x<o.x+o.w &&
-                b.y>o.y && b.y<o.y+o.h) {
-                o.hp--;
-                b.x=2000;
-                createExplosion(b.x,b.y);
-            }
-        });
-    });
-
-    // УБИРАЕМ МЁРТВЫХ
-    enemies = enemies.filter(e=>e.hp>0);
-    soldiers = soldiers.filter(s=>s.hp>0);
-    buildings = buildings.filter(o=>o.hp>0);
-
-    // ПОБЕДА
-    if (enemies.length===0 && soldiers.length===0 && buildings.length===0) {
-        playing = false;
-        document.getElementById("menu").style.display="flex";
+  // --- Touch joysticks (simple implementation) ---
+  function makeJoystick(containerId, stickEl, onMove){
+    let active = false, startX=0, startY=0;
+    let baseRect = null;
+    function pointerDown(e){
+      active = true;
+      usingTouch = true;
+      const p = getPointer(e);
+      startX = p.x; startY = p.y;
+      baseRect = {x:startX, y:startY};
+      stickEl.style.transform = 'translate(0px,0px)';
     }
+    function pointerMove(e){
+      if(!active) return;
+      const p = getPointer(e);
+      const dx = p.x - startX, dy = p.y - startY;
+      const max = 40;
+      const len = Math.hypot(dx,dy);
+      const nx = (len>max? dx*(max/len):dx);
+      const ny = (len>max? dy*(max/len):dy);
+      stickEl.style.transform = `translate(${nx}px,${ny}px)`;
+      onMove(nx/40, ny/40);
+    }
+    function pointerUp(e){
+      active = false;
+      usingTouch = true;
+      stickEl.style.transform = 'translate(0px,0px)';
+      onMove(0,0);
+    }
+    function getPointer(e){
+      if(e.touches && e.touches[0]) return {x:e.touches[0].clientX, y:e.touches[0].clientY};
+      return {x:e.clientX, y:e.clientY};
+    }
+    // bind to whole document for robustness
+    stickEl.addEventListener('touchstart', pointerDown);
+    stickEl.addEventListener('touchmove', pointerMove, {passive:false});
+    stickEl.addEventListener('touchend', pointerUp);
+    stickEl.addEventListener('mousedown', pointerDown);
+    window.addEventListener('mousemove', pointerMove);
+    window.addEventListener('mouseup', pointerUp);
+    return {pointerDown,pointerMove,pointerUp};
+  }
 
+  let leftJoy = {x:0,y:0}, rightJoy = {x:0,y:0};
+  makeJoystick('joyLeft', leftStick, (x,y) => { leftJoy.x = x; leftJoy.y = y; });
+  makeJoystick('joyRight', rightStick, (x,y) => { rightJoy.x = x; rightJoy.y = y; });
+
+  // explode button
+  explodeBtn.addEventListener('click', () => {
+    if(gameState==='playing' && player) player.armed = true;
+  });
+  explodeBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); if(gameState==='playing' && player) player.armed = true; });
+
+  // mouse click to set camera target (debug)
+  canvas.addEventListener('click', (e) => {
+    // on desktop click we aim camera to click while paused or quick reposition
+    if(gameState==='menu') return;
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+    // convert to world
+    const scale = Math.min(W / 600, H / 400) * camera.zoom;
+    const wx = camera.x + (sx - W/2)/scale;
+    const wy = camera.y + (sy - H/2)/scale;
+    player.x = wx; player.y = wy;
+  });
+
+  // --- Game loop and update ---
+  function setLevel(n){
+    currentLevel = n;
+    levelLabel.textContent = currentLevel;
+    generateLevel(currentLevel);
+    score = 0;
+    scoreEl.textContent = score;
+    droneLivesEl.textContent = player.lives;
+  }
+
+  startBtn.addEventListener('click', () => {
+    setLevel(parseInt(levelSelect.value));
+    gameState = 'playing';
+    startBtn.style.display = 'none';
+    toMenuBtn.style.display = 'inline-block';
+  });
+
+  toMenuBtn.addEventListener('click', () => {
+    gameState = 'menu';
+    startBtn.style.display = 'inline-block';
+    toMenuBtn.style.display = 'none';
+  });
+
+  pauseBtn.addEventListener('click', () => {
+    if(gameState!=='playing') return;
+    paused = !paused;
+    pauseBtn.textContent = paused ? 'Продолжить' : 'Пауза';
+  });
+
+  restartBtn.addEventListener('click', () => {
+    if(gameState==='menu') return;
+    setLevel(currentLevel);
+  });
+
+  // main tick
+  function loop(t){
+    delta = (t - lastTime)/1000;
+    lastTime = t;
+    if(!paused && gameState==='playing'){
+      update(delta);
+    }
+    render();
     requestAnimationFrame(loop);
-}
+  }
+  requestAnimationFrame(loop);
 
-// СТРЕЛЬБА
-setInterval(()=>{
-    if (!playing) return;
-    bullets.push({ x:drone.x+10, y:drone.y });
-}, 200);
+  function update(dt){
+    if(!player) return;
+    // update player properties from UI
+    player.speed = parseFloat(speedRange.value);
+    player.power = parseInt(powerRange.value);
 
-// ДЖОЙСТИКИ
-function joystick(id, cb) {
-    const joy=document.getElementById(id);
-    const stick=joy.children[0];
+    // input -> movement
+    let inputX = 0, inputY = 0;
+    // keyboard WASD or arrows
+    if(keys['w'] || keys['arrowup']) inputY -= 1;
+    if(keys['s'] || keys['arrowdown']) inputY += 1;
+    if(keys['a'] || keys['arrowleft']) inputX -= 1;
+    if(keys['d'] || keys['arrowright']) inputX += 1;
+    // touch joystick a la leftJoy (y inverted because screen coords)
+    if(Math.abs(leftJoy.x) > 0.01 || Math.abs(leftJoy.y) > 0.01){
+      inputX += leftJoy.x;
+      inputY += leftJoy.y * -1;
+    }
+    // normalize
+    const len = Math.hypot(inputX,inputY) || 1;
+    player.vx = (inputX/len) * player.speed * dt;
+    player.vy = (inputY/len) * player.speed * dt;
+    player.x += player.vx;
+    player.y += player.vy;
 
-    joy.addEventListener("touchmove", e=>{
-        const t=e.touches[0];
-        const r=joy.getBoundingClientRect();
+    // rotation: use right joystick or pointer
+    if(Math.abs(rightJoy.x) > 0.05 || Math.abs(rightJoy.y) > 0.05){
+      // compute angle from right joystick vector
+      player.angle = Math.atan2(-rightJoy.y, rightJoy.x);
+    } else {
+      // rotate towards movement
+      if(Math.hypot(player.vx,player.vy) > 0.01){
+        player.angle = Math.atan2(player.vy, player.vx);
+      }
+    }
 
-        let x=t.clientX - r.left - 60;
-        let y=t.clientY - r.top  - 60;
+    // camera follows player smoothly
+    camera.x += (player.x - camera.x) * Math.min(dt*6, 1);
+    camera.y += (player.y - camera.y) * Math.min(dt*6, 1);
 
-        x=Math.max(-40, Math.min(40,x));
-        y=Math.max(-40, Math.min(40,y));
+    // enemies AI: simple move toward player and fire occasionally
+    for(let en of enemies){
+      const dx = player.x - en.x, dy = player.y - en.y;
+      const dist = Math.hypot(dx,dy);
+      // movement
+      const nx = dx/dist, ny = dy/dist;
+      const wander = Math.sin(performance.now()/1000 + en.id.length) * 0.5;
+      en.x += (nx * en.speed * dt) + wander;
+      en.y += (ny * en.speed * dt) + (Math.cos(performance.now()/800 + en.id.length)*0.5);
+      // firing (infantry have low firepower)
+      en.fireCooldown -= dt;
+      if(en.fireCooldown <= 0 && dist < 800){
+        en.fireCooldown = randFloat(0.8, 2.5);
+        // create simple bullet toward player
+        bullets.push({
+          id: uid(),
+          x: en.x, y: en.y,
+          vx: (player.x - en.x)/dist * (en.type==='infantry'?180:260),
+          vy: (player.y - en.y)/dist * (en.type==='infantry'?180:260),
+          damage: (en.type==='tank'?2:1),
+          life: 4
+        });
+      }
+    }
 
-        stick.style.left = (35 + x) + "px";
-        stick.style.top  = (35 + y) + "px";
+    // bullets update + collisions (bullets vs player)
+    for(let i = bullets.length-1; i>=0; i--){
+      const b = bullets[i];
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.life -= dt;
+      if(b.life <= 0) { bullets.splice(i,1); continue; }
+      // hit player?
+      const d = Math.hypot(b.x - player.x, b.y - player.y);
+      if(d < 28){
+        bullets.splice(i,1);
+        // player damaged -> instant lose (since kamikaze drone has 1 life)
+        player.lives -= 1;
+        droneLivesEl.textContent = player.lives;
+        explosions.push({x:player.x,y:player.y,r:0, maxR:70});
+        if(player.lives <= 0){
+          gameOver(false);
+          return;
+        }
+      }
+    }
 
-        cb(x/40, y/40);
-    });
+    // detect collisions: player with enemies/buildings
+    // if armed and contacts enemy/building -> explode and kill target
+    if(player.armed){
+      // explosion triggered on contact with anything heavy
+      // find nearest target within radius
+      const explodeRadius = 60;
+      // check enemies
+      for(let i=enemies.length-1;i>=0;i--){
+        const e = enemies[i];
+        const d = Math.hypot(e.x - player.x, e.y - player.y);
+        if(d < explodeRadius){
+          // damage enemy
+     e.hp -= player.power + 3; // armed does heavy damage
+          explosions.push({x:player.x,y:player.y,r:0,maxR:100});
+          player.armed = false;
+          // player dies
+          player.lives -= 1;
+          droneLivesEl.textContent = player.lives;
+          if(e.hp <= 0){ enemies.splice(i,1); score += 50; }
+          if(player.lives <= 0){ gameOver(enemies.length===0); return; }
+        }
+      }
+      // check buildings
+      for(let b of buildings){
+        const bx = b.x + b.w/2, by = b.y + b.h/2;
+        if(Math.hypot(bx-player.x, by-player.y) < explodeRadius + Math.max(b.w,b.h)/2){
+          b.hp -= player.power + 4;
+          explosions.push({x:player.x,y:player.y,r:0,maxR:100});
+          player.armed = false;
+          player.lives -= 1;
+          droneLivesEl.textContent = player.lives;
+          if(player.lives <= 0){ gameOver(enemies.length===0); return; }
+        }
+      }
+    }
 
-    joy.addEventListener("touchend", ()=>{
-        stick.style.left="35px";
-        stick.style.top="35px";
-        cb(0,0);
-    });
-}
+    // remove destroyed buildings
+    for(let i=buildings.length-1;i>=0;i--){
+      if(buildings[i].hp <= 0){
+        explosions.push({x:buildings[i].x+buildings[i].w/2, y:buildings[i].y+buildings[i].h/2, r:0, maxR: Math.max(buildings[i].w,buildings[i].h)});
+        buildings.splice(i,1);
+        score += 20;
+      }
+    }
 
-joystick("leftJoy",(lx,ly)=>{
-    drone.x += lx * drone.speed;
-    drone.y += ly * drone.speed;
-});
+    // remove dead enemies
+    for(let i=enemies.length-1;i>=0;i--){
+      if(enemies[i].hp <= 0){
+        explosions.push({x:enemies[i].x, y:enemies[i].y, r:0, maxR:50});
+        enemies.splice(i,1);
+        score += 50;
+      }
+    }
 
-joystick("rightJoy",(rx,ry)=>{ /* пока пусто */ });
+    // explosions animate
+    for(let i=explosions.length-1;i>=0;i--){
+      const ex = explosions[i];
+      ex.r += dt * 300;
+      if(ex.r > ex.maxR) explosions.splice(i,1);
+    }
 
-function startGame(){
-    document.getElementById("menu").style.display="none";
-    drone.x=200; drone.y=250;
-    spawnLevel();
-    playing = true;
-    loop();
-}
+    // check level clear
+    if(enemies.length === 0){
+      // level complete
+      score += 200 * currentLevel;
+      // advance or win
+      if(currentLevel < 5){
+        currentLevel++;
+        setTimeout(()=>{ setLevel(currentLevel); }, 700);
+      } else {
+        gameOver(true);
+      }
+    }
+
+    scoreEl.textContent = score;
+  }
+
+  function gameOver(won){
+    gameState = 'menu';
+    startBtn.style.display = 'inline-block';
+    toMenuBtn.style.display = 'none';
+    alert(won ? ('Поздравляю! Вы прошли все уровни. Очки: ' + score) : ('Дрон уничтожен. Очки: ' + score));
+  }
+
+  // --- Rendering ---
+  function render(){
+    // clear
+    ctx.fillStyle = '#071018';
+    ctx.fillRect(0,0,W,H);
+
+    if(gameState==='menu'){
+      // draw menu-style world preview
+      drawWorldPreview();
+      return;
+    }
+
+    // draw world: grass/grid
+    drawGrid();
+
+    // draw buildings
+    for(let b of buildings){
+      const s = worldToScreen(b.x, b.y);
+      const s2 = worldToScreen(b.x + b.w, b.y + b.h);
+      const sw = s2.x - s.x, sh = s2.y - s.y;
+      ctx.fillStyle = '#3b3b3b';
+      ctx.fillRect(s.x, s.y, sw, sh);
+      // windows / damage
+      ctx.fillStyle = b.hp >= 3 ? '#dcdcdc' : '#7a2b2b';
+      for(let wx = s.x+6; wx < s.x+sw-10; wx += 20){
+        for(let wy = s.y+6; wy < s.y+sh-10; wy += 20){
+          ctx.fillRect(wx, wy, 8, 8);
+        }
+      }
+      // outline
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+      ctx.strokeRect(s.x, s.y, sw, sh);
+    }
+
+    // draw enemies
+    for(let e of enemies){
+      const p = worldToScreen(e.x, e.y);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(e.dir || 0);
+      if(e.type === 'tank'){
+        ctx.fillStyle = '#2a2f36';
+        ctx.fillRect(-28,-16,56,32);
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillRect(-10,-26,20,8); // turret
+        ctx.fillStyle = '#c64';
+        ctx.fillRect(-28,18,56,6); // track
+      } else if(e.type === 'car'){
+        ctx.fillStyle = '#4c6b8a';
+        ctx.fillRect(-16,-8,32,16);
+        ctx.fillStyle = '#111';
+        ctx.fillRect(-10,-12,6,4);
+      } else { // infantry
+        ctx.fillStyle = '#b45';
+        ctx.beginPath(); ctx.arc(0,0,8,0,Math.PI*2); ctx.fill();
+      }
+      // hp bar
+      ctx.fillStyle = 'red';
+      ctx.fillRect(-22,-30,44 * Math.max(0,e.hp)/10,5);
+      ctx.restore();
+    }
+
+    // draw bullets
+    for(let b of bullets){
+      const p = worldToScreen(b.x, b.y);
+      ctx.fillStyle = '#ffd';
+      ctx.beginPath(); ctx.arc(p.x,p.y,4,0,Math.PI*2); ctx.fill();
+    }
+
+    // draw explosions
+    for(let ex of explosions){
+      const p = worldToScreen(ex.x, ex.y);
+      const alpha = Math.max(0, 1 - ex.r / ex.maxR);
+      ctx.fillStyle = `rgba(255,160,30,${alpha})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, ex.r * (worldToScreen(ex.x,ex.y).scale), 0, Math.PI*2); ctx.fill();
+    }
+
+    // draw player drone
+    if(player){
+      const p = worldToScreen(player.x, player.y);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(player.angle + Math.PI/2);
+      // draw drone image if loaded
+      if(droneLoaded){
+        const scale = 0.32 * (worldToScreen(player.x,player.y).scale);
+        const iw = droneImg.width * scale;
+        const ih = droneImg.height * scale;
+        ctx.drawImage(droneImg, -iw/2, -ih/2, iw, ih);
+      } else {
+        // draw stylized drone
+        ctx.fillStyle = '#0ff';
+        ctx.beginPath();
+        ctx.ellipse(0,0,34* (worldToScreen(player.x,player.y).scale), 18*(worldToScreen(player.x,player.y).scale), 0,0,Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(-6, -12, 12, 24);
+      }
+      // armed indicator
+      if(player.armed){
+        ctx.strokeStyle = '#ff4d4d';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(0,0,42 * worldToScreen(player.x,player.y).scale, 0, Math.PI*2); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // HUD overlay: mini-map
+    drawMiniMap();
+  }
+
+  function drawGrid(){
+    // draw simple ground and grid relative to camera
+    ctx.fillStyle = '#0b1318';
+    ctx.fillRect(0,0,W,H);
+    const scale = Math.min(W / 600, H / 400) * camera.zoom;
+    const gridSize = 100 * scale;
+    ctx.strokeStyle = 'rgba(255,255,255,0.02)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const startX = (W/2 - camera.x*scale) % gridSize;
+    for(let x = startX; x < W; x += gridSize){
+      ctx.moveTo(x,0); ctx.lineTo(x,H);
+    }
+    const startY = (H/2 - camera.y*scale) % gridSize;
+    for(let y = startY; y < H; y += gridSize){
+      ctx.moveTo(0,y); ctx.lineTo(W,y);
+    }
+    ctx.stroke();
+  }
+
+  function drawMiniMap(){
+    const size = 140;
+    const pad = 12;
+    const mx = W - size - pad, my = H - size - pad;
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = '#071018';
+    ctx.fillRect(mx, my, size, size);
+    // draw outline and mini elements
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.strokeRect(mx, my, size, size);
+    // scale world -> mini
+    const s = size / MAP_SIZE;
+    // buildings
+    for(let b of buildings){
+      ctx.fillStyle = '#474747';
+      ctx.fillRect(mx + b.x*s, my + b.y*s, Math.max(1, b.w*s), Math.max(1, b.h*s));
+    }
+    // enemies
+    for(let e of enemies){
+      ctx.fillStyle = e.type==='tank' ? '#ff4d4d' : (e.type==='car' ? '#ffd86b' : '#a6ffb8');
+      ctx.fillRect(mx + e.x*s - 2, my + e.y*s - 2, 4,4);
+    }
+    // player
+    if(player){
+      ctx.fillStyle = '#00f6ff';
+      ctx.fillRect(mx + player.x*s - 3, my + player.y*s - 3, 6, 6);
+    }
+    ctx.restore();
+  }
+
+  function drawWorldPreview(){
+    // simple rotating preview to make menu pretty
+    const cx = W/2, cy = H/2;
+    ctx.fillStyle = '#071018';
+    ctx.fillRect(0,0,W,H);
+    // draw circular small map
+    const r = Math.min(W,H)/4;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(performance.now()/5000);
+    // background tiles
+    for(let i=0;i<80;i++){
+      ctx.fillStyle = i%2? '#0d1720':'#07131a';
+      ctx.fillRect(-r + (i%9)*(r*2/9), -r + Math.floor(i/9)*(r*2/9), r*2/9 -2, r*2/9 -2);
+    }
+    // sample enemy blobs
+    for(let i=0;i<12;i++){
+      ctx.fillStyle = 'rgba(255,80,60,0.9)';
+      ctx.beginPath(); ctx.arc(Math.cos(i)*r*0.6, Math.sin(i)*r*0.6, 8 + (i%3)*3, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // --- helpers & initialization ---
+  function init(){
+    drawPreview();
+    // initial UI text
+    levelLabel.textContent = currentLevel;
+    scoreEl.textContent = score;
+    droneLivesEl.textContent = 1;
+    // start menu preview generation
+    setDefaultDrone();
+    // set default map preview
+    generateLevel(1);
+  }
+  init();
+
+  // small helpers: random seed? not needed
+
+  // prevent iOS bounce
+  document.body.addEventListener('touchmove', function(e){ if(usingTouch) e.preventDefault(); }, {passive:false});
+
+})();
 </script>
-</body>
-</html>
+
+    
